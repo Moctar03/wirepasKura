@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    
+   Copyright (c) 2018, 2020 Eurotech and/or its affiliates and others
+  
+   This program and the accompanying materials are made
+   available under the terms of the Eclipse Public License 2.0
+   which is available at https://www.eclipse.org/legal/epl-2.0/
+ 
+	SPDX-License-Identifier: EPL-2.0
+	
+	Contributors:
+    Eurotech
+    
+-->
+<scr:component xmlns:scr="http://www.osgi.org/xmlns/scr/v1.1.0" activate="activate" configuration-policy="require" deactivate="deactivate" enabled="true" modified="update" name="com.solidsense.wirepas.provider">
+   <implementation class="com.solidsense.wirepas.provider.GPIODriver"/> 
+   <property name="service.pid" value="com.solidsense.wirepas.provider"/>
+   <service>
+      <provide interface="org.eclipse.kura.driver.Driver"/>
+      <provide interface="org.eclipse.kura.configuration.ConfigurableComponent"/>
+   </service>
+   <reference bind="bindGPIOService" cardinality="1..n" interface="org.eclipse.kura.gpio.GPIOService" name="GPIOService" policy="dynamic" unbind="unbindGPIOService"/>
+</scr:component>
