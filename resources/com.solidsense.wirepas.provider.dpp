@@ -1,15 +1,15 @@
 #Deployment Plugin Project File
-#Fri Feb 25 16:44:22 CET 2022
+#Fri Mar 11 16:44:01 CET 2022
 build.ant.name=<.>\\resources\\com.solidsense.wirepas.provider_build.xml
 build.dp.file=<.>\\resources\\com.solidsense.wirepas.provider.dp
 build.location=
-bundles.0.bundle_path=<.>\\target\\org.eclipse.kura.driver.gpio.provider-1.1.0-SNAPSHOT.jar
+bundles.0.bundle_path=<.>\\target\\com.solidsense.wirepas.provider-1.1.0-SNAPSHOT.jar
 bundles.0.customizer=false
 bundles.0.headers.count=0
 bundles.0.missing=false
-bundles.0.name=bundles/org.eclipse.kura.driver.gpio.provider-1.1.0-SNAPSHOT.jar
-bundles.0.symbolic_name=org.eclipse.kura.driver.gpio.provider;singleton\:\=true
-bundles.0.version=1.1.0.202201131636
+bundles.0.name=bundles/com.solidsense.wirepas.provider-1.1.0-SNAPSHOT.jar
+bundles.0.symbolic_name=com.solidsense.wirepas.provider;singleton\:\=true
+bundles.0.version=1.1.0.202203091551
 bundles.count=1
 certificates.count=0
 general.signbundles=false
