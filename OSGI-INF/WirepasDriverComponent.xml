@@ -20,5 +20,5 @@
       <provide interface="org.eclipse.kura.driver.Driver"/>
       <provide interface="org.eclipse.kura.configuration.ConfigurableComponent"/>
    </service>
-   <reference bind="bindGPIOService" cardinality="1..n" interface="org.eclipse.kura.gpio.GPIOService" name="GPIOService" policy="dynamic" unbind="unbindGPIOService"/>
+   <reference bind="setCloudPublisher" cardinality="0..1" interface="org.eclipse.kura.cloudconnection.publisher.CloudPublisher" name="CloudPublisher" policy="dynamic" unbind="unsetCloudPublisher"/>
 </scr:component>

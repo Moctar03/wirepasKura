@@ -17,6 +17,7 @@ import static org.eclipse.kura.channel.ChannelFlag.FAILURE;
 import static org.eclipse.kura.channel.ChannelFlag.SUCCESS;
 
 import java.math.BigInteger;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -30,10 +31,15 @@ import org.eclipse.kura.KuraRuntimeException;
 import org.eclipse.kura.channel.ChannelRecord;
 import org.eclipse.kura.channel.ChannelStatus;
 import org.eclipse.kura.channel.listener.ChannelListener;
+import org.eclipse.kura.cloudconnection.listener.CloudConnectionListener;
+import org.eclipse.kura.cloudconnection.listener.CloudDeliveryListener;
+import org.eclipse.kura.cloudconnection.message.KuraMessage;
+import org.eclipse.kura.cloudconnection.publisher.CloudPublisher;
 import org.eclipse.kura.configuration.ConfigurableComponent;
 import org.eclipse.kura.driver.ChannelDescriptor;
 import org.eclipse.kura.driver.Driver;
 import org.eclipse.kura.driver.PreparedRead;
+import org.eclipse.kura.message.KuraPayload;
 import org.eclipse.kura.type.DataType;
 import org.eclipse.kura.type.TypedValue;
 import org.eclipse.kura.type.TypedValues;
@@ -63,21 +69,36 @@ import org.slf4j.LoggerFactory;
  * @see WirepasChannelDescriptor
  *
  */
-public final class WirepasDriver extends Thread implements Driver, ConfigurableComponent {
+public final class WirepasDriver extends Thread implements Driver, CloudConnectionListener, CloudDeliveryListener, ConfigurableComponent {
 
     private static final Logger logger  = LoggerFactory.getLogger(WirepasDriver.class);
     private static final String WRITE_FAILED_MESSAGE = "Driver write operation failed";
     private static final String READ_FAILED_MESSAGE = "Driver read operation failed";
+    private CloudPublisher cloudPublisher;
     private WirepasListener wirepasListener;
     private Set<WirepasListener> gpioListeners;
     private String nodeAddress;
     private boolean stop = false;
+    
+    public void setCloudPublisher(CloudPublisher cloudPublisher) {
+        this.cloudPublisher = cloudPublisher;
+        this.cloudPublisher.registerCloudConnectionListener(WirepasDriver.this);
+        this.cloudPublisher.registerCloudDeliveryListener(WirepasDriver.this);
+    }
 
+    public void unsetCloudPublisher(CloudPublisher cloudPublisher) {
+        this.cloudPublisher.unregisterCloudConnectionListener(WirepasDriver.this);
+        this.cloudPublisher.unregisterCloudDeliveryListener(WirepasDriver.this);
+        this.cloudPublisher = null;
+    }
+    
     protected synchronized void activate(final Map<String, Object> properties) {
         logger.debug("Activating GPIO Driver...");
         this.gpioListeners = new HashSet<>();
+        nodeAddress = (String) properties.get("Node Address");
+        this.start();
         logger.debug("Activating GPIO Driver... Done");
-        }
+    }
     
 
     public void run() {
@@ -100,6 +121,7 @@ public final class WirepasDriver extends Thread implements Driver, ConfigurableC
             System.out.println(e);
         }
     }
+    
     protected synchronized void deactivate() {
         logger.debug("Deactivating GPIO Driver...");
         doDeactivate();
@@ -109,9 +131,8 @@ public final class WirepasDriver extends Thread implements Driver, ConfigurableC
     protected synchronized void update(final Map<String, Object> properties) {
         logger.debug("Updating GPIO Driver...");
         nodeAddress = (String) properties.get("Node Address");
-        logger.info("UPDATE " + nodeAddress);
         logger.debug("Updating GPIO Driver... Done");
-        this.start();
+        this.wirepasListener.setChannelName(nodeAddress);
     }
 
     private void doDeactivate() {
@@ -135,18 +156,33 @@ public final class WirepasDriver extends Thread implements Driver, ConfigurableC
 
     @Override
     public synchronized void read(final List<ChannelRecord> records) throws ConnectionException {
+        KuraPayload payload = new KuraPayload();
+        payload.setTimestamp(new Date());
         for (final ChannelRecord record : records) {
-            logger.info("READ INFO");
             String endpoint =  (String) record.getChannelConfig().get("endpoint");
+            String channelName = (String) record.getChannelConfig().get("+name");
             final Optional<TypedValue<?>> typedValue = this.wirepasListener.getValue(endpoint, record.getValueType());
             if (typedValue.isPresent()) {
                 record.setValue(typedValue.get());
+                payload.addMetric(channelName, typedValue.get());
                 record.setChannelStatus(new ChannelStatus(SUCCESS));
                 record.setTimestamp(System.currentTimeMillis());
             } else {
                 record.setChannelStatus(new ChannelStatus(FAILURE, READ_FAILED_MESSAGE, null));
                 record.setTimestamp(System.currentTimeMillis());
             }
+        }
+        if (this.cloudPublisher == null) {
+            logger.info("No cloud publisher selected. Cannot publish!");
+            return;
+        }
+        KuraMessage message = new KuraMessage(payload);
+        // Publish the message
+        try {
+            this.cloudPublisher.publish(message);
+            logger.info("Published message: {}", payload);
+        } catch (Exception e) {
+            logger.error("Cannot publish message: {}", message, e);
         }
     }
 
@@ -167,7 +203,6 @@ public final class WirepasDriver extends Thread implements Driver, ConfigurableC
     public synchronized void registerChannelListener(final Map<String, Object> channelConfig,
             final ChannelListener listener) throws ConnectionException {
         String channelName = (String) channelConfig.get("+name");
-        logger.info("REGISTER Channel");
         WirepasListener gpioListener = new WirepasListener(channelName);
 
         this.gpioListeners.add(gpioListener);
@@ -196,7 +231,8 @@ public final class WirepasDriver extends Thread implements Driver, ConfigurableC
                 return Optional.of(TypedValues.newIntegerValue(new BigInteger((byte[]) containedValue).intValue()));
             case BOOLEAN:
                 int expectedValue = new BigInteger((byte[]) containedValue).intValue();
-                return Optional.of(TypedValues.newBooleanValue(expectedValue > 0));
+                return Optional.of(TypedValues.newBooleanValue((expectedValue > 0) ? true : false));
+                
             case STRING:
                 return Optional.of(TypedValues.newStringValue(new String((byte[]) containedValue)));
             case BYTE_ARRAY:
@@ -224,13 +260,9 @@ public final class WirepasDriver extends Thread implements Driver, ConfigurableC
         public void handle(DBusSignal s) {
             try {
                 String srcAddress = String.valueOf(s.getParameters()[1]);
-                logger.info("HANDLE");
-                logger.info(srcAddress + ", channelName = " + channelName);
                 if (srcAddress.equalsIgnoreCase(channelName)) {
                     String srcEp = String.valueOf(s.getParameters()[3]);
-                    logger.info("EndPoint expected = " + srcEp);
                     Object bytesArr = s.getParameters()[8];
-                    logger.info(new String((byte[]) bytesArr));
                     wirepasListeners.put(srcEp, bytesArr);
                 }
             } catch (DBusException e) { 
@@ -238,12 +270,29 @@ public final class WirepasDriver extends Thread implements Driver, ConfigurableC
             }
         }
         
+        public void setChannelName(String newchannelName) {
+           this.channelName = newchannelName;
+        }
+        
         public Optional<TypedValue<?>> getValue(String endpoint, DataType expectedValueType) {
             final Optional<TypedValue<?>> typedValue = getTypedValue(expectedValueType, wirepasListeners.get(endpoint));
-            logger.info("TYPEDVALUE");
-            logger.info(endpoint + " " + expectedValueType.toString());
-            logger.info(typedValue.toString());
             return typedValue;
         }
+    }
+
+    @Override
+    public void onMessageConfirmed(String messageId) {
+    }
+
+    @Override
+    public void onDisconnected() {
+    }
+
+    @Override
+    public void onConnectionLost() {
+    }
+
+    @Override
+    public void onConnectionEstablished() {
     }
 }
