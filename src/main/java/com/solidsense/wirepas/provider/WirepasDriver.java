@@ -76,7 +76,7 @@ public final class WirepasDriver extends Thread implements Driver, CloudConnecti
     private static final String READ_FAILED_MESSAGE = "Driver read operation failed";
     private CloudPublisher cloudPublisher;
     private WirepasListener wirepasListener;
-    private Set<WirepasListener> gpioListeners;
+    private Set<WirepasListener> wirepasListeners;
     private String nodeAddress;
     private boolean stop = false;
     
@@ -94,7 +94,7 @@ public final class WirepasDriver extends Thread implements Driver, CloudConnecti
     
     protected synchronized void activate(final Map<String, Object> properties) {
         logger.debug("Activating GPIO Driver...");
-        this.gpioListeners = new HashSet<>();
+        this.wirepasListeners = new HashSet<>();
         nodeAddress = (String) properties.get("Node Address");
         this.start();
         logger.debug("Activating GPIO Driver... Done");
@@ -205,13 +205,13 @@ public final class WirepasDriver extends Thread implements Driver, CloudConnecti
         String channelName = (String) channelConfig.get("+name");
         WirepasListener gpioListener = new WirepasListener(channelName);
 
-        this.gpioListeners.add(gpioListener);
+        this.wirepasListeners.add(gpioListener);
         
     }
 
     @Override
     public synchronized void unregisterChannelListener(final ChannelListener listener) throws ConnectionException {
-        Iterator<WirepasListener> iterator = this.gpioListeners.iterator();
+        Iterator<WirepasListener> iterator = this.wirepasListeners.iterator();
         logger.info(iterator.toString());
     }
 
