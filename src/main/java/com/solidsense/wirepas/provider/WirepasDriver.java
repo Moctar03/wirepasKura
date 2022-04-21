@@ -77,7 +77,9 @@ public final class WirepasDriver extends Thread implements Driver, CloudConnecti
     private CloudPublisher cloudPublisher;
     private WirepasListener wirepasListener;
     private Set<WirepasListener> wirepasListeners;
+    private Map<String, Object> properties;
     private String nodeAddress;
+    private String nodeName;
     private boolean stop = false;
     
     public void setCloudPublisher(CloudPublisher cloudPublisher) {
@@ -95,7 +97,12 @@ public final class WirepasDriver extends Thread implements Driver, CloudConnecti
     protected synchronized void activate(final Map<String, Object> properties) {
         logger.debug("Activating GPIO Driver...");
         this.wirepasListeners = new HashSet<>();
+        if (this.properties == null) {
+            this.properties = new HashMap<>();
+        }
         nodeAddress = (String) properties.get("Node Address");
+        nodeName = (String) properties.get("Node Name");
+        this.properties.put("assetName", nodeName);
         this.start();
         logger.debug("Activating GPIO Driver... Done");
     }
@@ -131,6 +138,11 @@ public final class WirepasDriver extends Thread implements Driver, CloudConnecti
     protected synchronized void update(final Map<String, Object> properties) {
         logger.debug("Updating GPIO Driver...");
         nodeAddress = (String) properties.get("Node Address");
+        nodeName = (String) properties.get("Node Name");
+        if (this.properties == null) {
+            this.properties = new HashMap<>();
+        }
+        this.properties.put("assetName", nodeName);
         logger.debug("Updating GPIO Driver... Done");
         this.wirepasListener.setChannelName(nodeAddress);
     }
@@ -164,7 +176,7 @@ public final class WirepasDriver extends Thread implements Driver, CloudConnecti
             final Optional<TypedValue<?>> typedValue = this.wirepasListener.getValue(endpoint, record.getValueType());
             if (typedValue.isPresent()) {
                 record.setValue(typedValue.get());
-                payload.addMetric(channelName, typedValue.get());
+                payload.addMetric(channelName, typedValue.get().getValue());
                 record.setChannelStatus(new ChannelStatus(SUCCESS));
                 record.setTimestamp(System.currentTimeMillis());
             } else {
@@ -176,7 +188,7 @@ public final class WirepasDriver extends Thread implements Driver, CloudConnecti
             logger.info("No cloud publisher selected. Cannot publish!");
             return;
         }
-        KuraMessage message = new KuraMessage(payload);
+        KuraMessage message = new KuraMessage(payload, this.properties);
         // Publish the message
         try {
             this.cloudPublisher.publish(message);
